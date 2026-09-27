@@ -1,9 +1,10 @@
 /** 合并决策：每组的用户选择、合并结果构建与时间单调性校验。 */
 import type { AlignGroup } from './align';
+import { planMix, renderMix, type MixSide } from './mix';
 import { parseTimecode, type Cue } from './srt';
 import { normalizeText } from './similarity';
 
-export type TextChoice = 'A' | 'B' | 'custom';
+export type TextChoice = 'A' | 'B' | 'custom' | 'mix';
 export type TimeChoice = 'A' | 'B' | 'union' | 'custom';
 
 export interface Resolution {
@@ -14,6 +15,8 @@ export interface Resolution {
   customEnd: string;
   /** 仅用于单边组：保留或丢弃 */
   keep: boolean;
+  /** 仅用于 text === 'mix'：局部混编各差异片段逐段选择 A/B */
+  mixChoices: MixSide[];
 }
 
 export interface GroupState {
@@ -56,6 +59,7 @@ export function defaultStateFor(group: AlignGroup, cuesA: Cue[], cuesB: Cue[]): 
     customStart: '',
     customEnd: '',
     keep: true,
+    mixChoices: [],
   };
   if (group.kind === 'A-only' || group.kind === 'B-only') {
     return { isConflict: false, resolved: true, resolution: base };
@@ -66,6 +70,18 @@ export function defaultStateFor(group: AlignGroup, cuesA: Cue[], cuesB: Cue[]): 
     return { isConflict: false, resolved: true, resolution: { ...base, text: 'A', time: 'A' } };
   }
   return { isConflict: true, resolved: false, resolution: { ...base, text: 'A', time: 'A' } };
+}
+
+/**
+ * 应用一次人工补丁到决定：改选整组 A/B/自定义（或重新对齐产生新组）时清除旧的
+ * 局部混编片段选择；进入混编（text === 'mix'）、逐段选择或仅改时间/自定义文本时保留。
+ */
+export function patchResolution(current: Resolution, patch: Partial<Resolution>): Resolution {
+  const clearing =
+    patch.text !== undefined && patch.text !== 'mix' && current.text === 'mix'
+      ? { mixChoices: [] as MixSide[] }
+      : {};
+  return { ...current, ...clearing, ...patch };
 }
 
 export type IssueKind = 'time-parse' | 'time-span' | 'time-order' | 'empty-text' | 'missing-source';
@@ -105,6 +121,10 @@ export function buildMergedCues(
     let text = '';
     if (res.text === 'custom') {
       text = res.customText.trim();
+    } else if (res.text === 'mix') {
+      // 局部混编：两侧拼接文本按字素 LCS 分段，匹配段固定、差异段逐段选择
+      const plan = planMix(mergedText(cuesA, g.aIdx), mergedText(cuesB, g.bIdx));
+      if (plan.ok) text = renderMix(plan, res.mixChoices);
     } else {
       const useA = res.text === 'A' ? g.aIdx.length > 0 : g.bIdx.length === 0;
       text = mergedText(useA ? cuesA : cuesB, useA ? g.aIdx : g.bIdx);

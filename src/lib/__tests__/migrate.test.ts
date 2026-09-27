@@ -352,7 +352,7 @@ describe('migrateStates', () => {
     ];
 
     const newBase = newGroupsWithExtra.map((g) => defaultStateFor(g, cuesAExtra, cuesBExtra));
-    const out = migrateStates(newGroupsWithExtra, newBase, oldStates, plan);
+    const out = migrateStates(newGroupsWithExtra, newBase, oldStates, plan, cuesAExtra, cuesBExtra);
 
     expect(out[0].resolved).toBe(true);
     expect(out[1].resolved).toBe(true);
@@ -380,7 +380,7 @@ describe('migrateStates', () => {
       },
     };
     const newBase = newGroups.map((g) => defaultStateFor(g, cuesA, cuesB));
-    const out = migrateStates(newGroups, newBase, oldStates, plan);
+    const out = migrateStates(newGroups, newBase, oldStates, plan, cuesA, cuesB);
     expect(out[0].resolution.text).toBe('custom');
     expect(out[0].resolution.customText).toBe('人工改写');
     expect(out[0].resolution.time).toBe('A');
@@ -388,13 +388,27 @@ describe('migrateStates', () => {
     expect(out[0].resolution.customEnd).toBe('');
   });
 
-  it('旧组未作出决定时不覆盖新默认（冲突仍需重新处理）', () => {
-    const r = planOf([[['甲'], ['甲乙']]], [[['甲'], ['甲乙']]]);
+  it('局部混编的逐段选择随决定迁移（双侧文本完全相同）', () => {
+    const r = planOf([[['你好世界'], ['你好呀世界']]], [[['你好世界'], ['你好呀世界']]]);
+    const { plan, oldGroups, newGroups, cuesA, cuesB } = r;
+    const oldStates = oldGroups.map((g) => defaultStateFor(g, cuesA, cuesB));
+    oldStates[0] = {
+      isConflict: true,
+      resolved: true,
+      resolution: { ...oldStates[0].resolution, text: 'mix', mixChoices: ['B'] },
+    };
+    const newBase = newGroups.map((g) => defaultStateFor(g, cuesA, cuesB));
+    const out = migrateStates(newGroups, newBase, oldStates, plan, cuesA, cuesB);
+    expect(out[0].resolution.text).toBe('mix');
+    expect(out[0].resolution.mixChoices).toEqual(['B']);
+  });
+
+  it('旧组未作出决定时不覆盖新默认（冲突仍需重新处理）', () => {    const r = planOf([[['甲'], ['甲乙']]], [[['甲'], ['甲乙']]]);
     const { plan, oldGroups, newGroups, cuesA, cuesB } = r;
     const oldStates = oldGroups.map((g) => defaultStateFor(g, cuesA, cuesB));
     expect(oldStates[0].resolved).toBe(false);
     const newBase = newGroups.map((g) => defaultStateFor(g, cuesA, cuesB));
-    const out = migrateStates(newGroups, newBase, oldStates, plan);
+    const out = migrateStates(newGroups, newBase, oldStates, plan, cuesA, cuesB);
     expect(out[0].resolved).toBe(false);
     expect(out[0].isConflict).toBe(true);
   });

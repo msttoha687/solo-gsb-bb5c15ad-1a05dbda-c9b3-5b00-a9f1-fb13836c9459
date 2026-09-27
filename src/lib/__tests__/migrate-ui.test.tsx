@@ -86,7 +86,7 @@ describe('重新校准迁移弹窗', () => {
     expect(plan.ambiguous).toHaveLength(0);
     const oldStates = groups.map((g) => defaultStateFor(g, a, b));
     const newBase = groups.map((g) => defaultStateFor(g, a, b));
-    const out = migrateStates(groups, newBase, oldStates, plan);
+    const out = migrateStates(groups, newBase, oldStates, plan, a, b);
     expect(out).toHaveLength(groups.length);
     // 新组默认状态都合法
     for (const s of out) {

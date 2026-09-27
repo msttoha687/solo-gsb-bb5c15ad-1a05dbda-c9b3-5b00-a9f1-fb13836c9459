@@ -4,6 +4,7 @@ import {
   autoFixTimes,
   buildMergedCues,
   defaultStateFor,
+  patchResolution,
   TIME_FIXABLE,
   type GroupState,
 } from '../merge';
@@ -41,6 +42,7 @@ function resolved(patch: Partial<GroupState['resolution']> = {}): GroupState {
       customStart: '',
       customEnd: '',
       keep: true,
+      mixChoices: [],
       ...patch,
     },
   };
@@ -55,6 +57,31 @@ describe('defaultStateFor', () => {
     const diff = group('g1', [0], [0]);
     expect(defaultStateFor(diff, cuesA, cuesB).isConflict).toBe(true);
     expect(defaultStateFor(diff, cuesA, cuesB).resolved).toBe(false);
+  });
+});
+
+describe('patchResolution：局部混编片段选择的保留与清除', () => {
+  const mixing = resolved({ text: 'mix', mixChoices: ['B', 'A'] }).resolution;
+
+  it('逐段选择保留混编状态与既有选择', () => {
+    const next = patchResolution(mixing, { mixChoices: ['A', 'A'] });
+    expect(next.text).toBe('mix');
+    expect(next.mixChoices).toEqual(['A', 'A']);
+  });
+
+  it('改选整组 A/B/自定义时清除旧片段选择', () => {
+    expect(patchResolution(mixing, { text: 'A' }).mixChoices).toEqual([]);
+    expect(patchResolution(mixing, { text: 'B' }).mixChoices).toEqual([]);
+    expect(patchResolution(mixing, { text: 'custom', customText: 'x' }).mixChoices).toEqual([]);
+  });
+
+  it('混编中改时间轴不清除片段选择', () => {
+    expect(patchResolution(mixing, { time: 'union' }).mixChoices).toEqual(['B', 'A']);
+  });
+
+  it('非混编状态下切换不受影响', () => {
+    const plain = resolved({ text: 'A' }).resolution;
+    expect(patchResolution(plain, { text: 'B' }).mixChoices).toEqual([]);
   });
 });
 
@@ -93,5 +120,19 @@ describe('buildMergedCues', () => {
     const states = [resolved({ time: 'custom', customStart: 'bad', customEnd: '00:00:02,000' })];
     const { issues } = buildMergedCues(groups, states, cuesA, cuesB);
     expect(issues.some((i) => i.kind === 'time-parse')).toBe(true);
+  });
+
+  it('局部混编：按逐段选择生成文本并作为已解决组进入结果', () => {
+    const a = parseSrt('1\n00:00:01,000 --> 00:00:04,000\n你好世界\n');
+    const b = parseSrt('1\n00:00:01,000 --> 00:00:04,000\n你好呀世界\n');
+    const groups = [group('g0', [0], [0])];
+    // 差异段（呀）取 B
+    const stB = resolved({ text: 'mix', mixChoices: ['B'] });
+    const rB = buildMergedCues(groups, [stB], a, b);
+    expect(rB.issues).toHaveLength(0);
+    expect(rB.cues[0].text).toBe('你好呀世界');
+    // 差异段取 A（删除侧）
+    const stA = resolved({ text: 'mix', mixChoices: ['A'] });
+    expect(buildMergedCues(groups, [stA], a, b).cues[0].text).toBe('你好世界');
   });
 });

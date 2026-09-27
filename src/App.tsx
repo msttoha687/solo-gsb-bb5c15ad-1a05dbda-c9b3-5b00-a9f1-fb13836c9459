@@ -11,6 +11,7 @@ import {
   autoFixTimes,
   buildMergedCues,
   defaultStateFor,
+  patchResolution,
   suggestTextChoice,
   TIME_FIXABLE,
   type GroupState,
@@ -231,7 +232,7 @@ export default function App() {
     if (!data || !data.plan.ok) return;
     const { oldStates, newGroups, newCuesB, calibrated, plan } = data;
     const newBase = newGroups.map((g) => defaultStateFor(g, cuesA, newCuesB));
-    const newStates = migrateStates(newGroups, newBase, oldStates, plan);
+    const newStates = migrateStates(newGroups, newBase, oldStates, plan, cuesA, cuesB);
     // 校准后的 B 时间轴随提交一起生效；使用原始时间时明确置空
     setCuesBUsed(calibrated ? newCuesB : null);
     setGroups(newGroups);
@@ -355,7 +356,7 @@ export default function App() {
   const updateResolution = (gi: number, patch: Partial<Resolution>) => {
     setStates((prev) =>
       prev.map((s, i) =>
-        i === gi ? { ...s, resolved: true, resolution: { ...s.resolution, ...patch } } : s,
+        i === gi ? { ...s, resolved: true, resolution: patchResolution(s.resolution, patch) } : s,
       ),
     );
   };
@@ -367,7 +368,7 @@ export default function App() {
         const g = groups[i];
         if (g.aIdx.length === 0 || g.bIdx.length === 0) return s;
         const text = choice === 'longer' ? suggestTextChoice(g, cuesA, cuesBEff) : choice;
-        return { ...s, resolved: true, resolution: { ...s.resolution, text } };
+        return { ...s, resolved: true, resolution: { ...s.resolution, text, mixChoices: [] } };
       }),
     );
   };
@@ -395,6 +396,7 @@ export default function App() {
                 ...s.resolution,
                 text: suggestTextChoice(groups[i], cuesA, cuesBEff),
                 time: 'union',
+                mixChoices: [],
               },
             }
           : s,

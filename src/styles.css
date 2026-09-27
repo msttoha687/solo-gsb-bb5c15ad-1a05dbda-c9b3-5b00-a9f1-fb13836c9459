@@ -774,6 +774,144 @@ body {
   color: var(--muted);
 }
 
+/* ---------- 局部混编 ---------- */
+.pill.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pill.disabled:hover {
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.mix-hint {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.mix-editor {
+  border: 1px solid rgba(91, 140, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(91, 140, 255, 0.06);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mix-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mix-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.mix-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: stretch;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  padding: 8px 10px;
+}
+
+.mix-seg.equal {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+.mix-diff {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mix-opt {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: 320px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 1px 7px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.mix-opt:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.mix-opt.a.sel {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.18);
+  color: #dbeafe;
+}
+
+.mix-opt.b.sel {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.18);
+  color: #ede9fe;
+}
+
+.mix-side-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.7;
+  line-height: 1.9;
+}
+
+.mix-seg-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mix-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.07);
+  padding: 7px 10px;
+}
+
+.mix-preview-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 5px;
+  padding: 0 6px;
+}
+
+.mix-preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  color: var(--text);
+}
+
 .empty {
   padding: 40px 0;
   text-align: center;

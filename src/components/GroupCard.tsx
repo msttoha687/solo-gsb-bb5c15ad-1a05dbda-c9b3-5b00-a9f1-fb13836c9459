@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { AlignGroup, GroupKind } from '../lib/align';
-import type { GroupState, Resolution, TextChoice, TimeChoice } from '../lib/merge';
+import { mergedText, type GroupState, type Resolution, type TextChoice, type TimeChoice } from '../lib/merge';
+import { defaultMixChoices, planMix, renderMix, type MixPlan, type MixSide } from '../lib/mix';
 import { formatTimecode, type Cue } from '../lib/srt';
 
 const KIND_LABEL: Record<GroupKind, string> = {
@@ -34,6 +36,37 @@ export function GroupCard({ index, group, state, cuesA, cuesB, suggestion, onRes
   const matched = group.aIdx.length > 0 && group.bIdx.length > 0;
   const onlySide = group.kind === 'A-only' ? 'A' : 'B';
   const cardCls = state.isConflict ? (state.resolved ? 'resolved' : 'unresolved') : '';
+
+  const textA = useMemo(() => mergedText(cuesA, group.aIdx), [cuesA, group.aIdx]);
+  const textB = useMemo(() => mergedText(cuesB, group.bIdx), [cuesB, group.bIdx]);
+  const mixPlan: MixPlan = useMemo(
+    () => (matched ? planMix(textA, textB) : { ok: false, segments: [], diffCount: 0, matches: [] }),
+    [matched, textA, textB],
+  );
+
+  // 进入局部混编：按字素 LCS 分段并给出默认逐段选择（每段取更长一侧），即时生成整组文本
+  const enterMix = () => {
+    if (!mixPlan.ok) return;
+    onResolve({ text: 'mix', mixChoices: defaultMixChoices(mixPlan) });
+  };
+
+  const pickSegment = (ci: number, side: MixSide) => {
+    if (!mixPlan.ok) return;
+    const choices =
+      res.mixChoices.length === mixPlan.diffCount
+        ? res.mixChoices.slice()
+        : defaultMixChoices(mixPlan);
+    choices[ci] = side;
+    onResolve({ mixChoices: choices });
+  };
+
+  const pickAllSegments = (side: MixSide) => {
+    if (!mixPlan.ok) return;
+    onResolve({ mixChoices: mixPlan.segments.filter((s) => s.kind === 'diff').map(() => side) });
+  };
+
+  const mixPreview =
+    res.text === 'mix' && mixPlan.ok ? renderMix(mixPlan, res.mixChoices) : '';
 
   return (
     <article className={`group-card ${cardCls}`} id={`group-${index}`}>
@@ -75,9 +108,13 @@ export function GroupCard({ index, group, state, cuesA, cuesB, suggestion, onRes
             <Pill value="B" current={res.text} onPick={(v: TextChoice) => onResolve({ text: v })}>
               版本 B
             </Pill>
+            <Pill value="mix" current={res.text} onPick={enterMix} disabled={!mixPlan.ok}>
+              局部混编
+            </Pill>
             <Pill value="custom" current={res.text} onPick={(v: TextChoice) => onResolve({ text: v })}>
               自定义
             </Pill>
+            {!mixPlan.ok && <span className="mix-hint">文本过长，无法局部混编</span>}
           </div>
           {res.text === 'custom' && (
             <textarea
@@ -87,6 +124,15 @@ export function GroupCard({ index, group, state, cuesA, cuesB, suggestion, onRes
               value={res.customText}
               spellCheck={false}
               onChange={(e) => onResolve({ customText: e.target.value })}
+            />
+          )}
+          {res.text === 'mix' && mixPlan.ok && (
+            <MixEditor
+              plan={mixPlan}
+              choices={res.mixChoices}
+              preview={mixPreview}
+              onPick={pickSegment}
+              onPickAll={pickAllSegments}
             />
           )}
           <div className="ctl-row">
@@ -139,19 +185,95 @@ export function GroupCard({ index, group, state, cuesA, cuesB, suggestion, onRes
   );
 }
 
+/** 局部混编编辑器：相同片段固定展示，差异片段逐段选择 A/B，顶部即时预览生成文本。 */
+function MixEditor({
+  plan,
+  choices,
+  preview,
+  onPick,
+  onPickAll,
+}: {
+  plan: MixPlan;
+  choices: readonly MixSide[];
+  preview: string;
+  onPick(choiceIndex: number, side: MixSide): void;
+  onPickAll(side: MixSide): void;
+}) {
+  const safeChoices: readonly MixSide[] =
+    choices.length === plan.diffCount
+      ? choices
+      : plan.segments.filter((s) => s.kind === 'diff').map(() => 'A' as MixSide);
+  return (
+    <div className="mix-editor">
+      <div className="mix-head">
+        <span className="mix-title">局部混编</span>
+        <span className="mix-hint">
+          相同片段固定保留，{plan.diffCount} 个差异片段逐段选择；按字素最长公共子序列对齐，重复词边界固定
+        </span>
+        <span className="spacer" />
+        <button type="button" className="btn sm" onClick={() => onPickAll('A')}>
+          差异全取 A
+        </button>
+        <button type="button" className="btn sm" onClick={() => onPickAll('B')}>
+          差异全取 B
+        </button>
+      </div>
+      <div className="mix-segments">
+        {plan.segments.map((seg, si) =>
+          seg.kind === 'equal' ? (
+            <span className="mix-seg equal" key={si}>
+              {seg.text}
+            </span>
+          ) : (
+            <span className="mix-diff" key={si}>
+              <button
+                type="button"
+                className={`mix-opt a ${safeChoices[seg.choiceIndex] === 'A' ? 'sel' : ''}`}
+                title={seg.aText === '' ? '该侧无此片段（删除）' : `取 A：${seg.aText}`}
+                onClick={() => onPick(seg.choiceIndex, 'A')}
+              >
+                <span className="mix-side-tag">A</span>
+                <span className="mix-seg-text">{seg.aText === '' ? '∅' : seg.aText}</span>
+              </button>
+              <button
+                type="button"
+                className={`mix-opt b ${safeChoices[seg.choiceIndex] === 'B' ? 'sel' : ''}`}
+                title={seg.bText === '' ? '该侧无此片段（插入）' : `取 B：${seg.bText}`}
+                onClick={() => onPick(seg.choiceIndex, 'B')}
+              >
+                <span className="mix-side-tag">B</span>
+                <span className="mix-seg-text">{seg.bText === '' ? '∅' : seg.bText}</span>
+              </button>
+            </span>
+          ),
+        )}
+      </div>
+      <div className="mix-preview" title="当前逐段选择生成的整组文本（已进入右侧预览与导出）">
+        <span className="mix-preview-label">混编结果</span>
+        <span className="mix-preview-text">{preview}</span>
+      </div>
+    </div>
+  );
+}
+
 function Pill<T extends string>({
   value,
   current,
   onPick,
   children,
+  disabled,
 }: {
   value: T;
   current: T;
   onPick(v: T): void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
-    <label className={`pill ${current === value ? 'active' : ''}`} onClick={() => onPick(value)}>
+    <label
+      className={`pill ${current === value ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+      onClick={disabled ? undefined : () => onPick(value)}
+    >
       <input type="radio" checked={current === value} readOnly />
       {children}
     </label>

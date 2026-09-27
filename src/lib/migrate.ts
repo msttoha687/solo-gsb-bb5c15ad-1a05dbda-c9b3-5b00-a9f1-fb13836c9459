@@ -16,6 +16,7 @@
  * 旧组的最优配偶恰有一个、且不存在“跳过它”的最优方案时，该对应关系才是唯一确定的。
  */
 import type { AlignGroup, GroupKind } from './align';
+import { planMix } from './mix';
 import type { Cue } from './srt';
 import { mergedText, type GroupState } from './merge';
 
@@ -250,6 +251,8 @@ export function migrateStates(
   newBaseStates: GroupState[],
   oldStates: GroupState[],
   plan: MigrationPlan,
+  cuesA: Cue[],
+  cuesB: Cue[],
 ): GroupState[] {
   const result = newBaseStates.map((s) => ({ ...s, resolution: { ...s.resolution } }));
   for (const e of plan.transfer) {
@@ -267,6 +270,16 @@ export function migrateStates(
       if (oldChoice === 'custom' || (oldChoice === 'A' && ng.aIdx.length > 0) || (oldChoice === 'B' && ng.bIdx.length > 0)) {
         resolution.text = oldChoice;
         resolution.customText = oldState.resolution.customText;
+      }
+      // 局部混编：配对条件保证新旧组双侧拼接文本完全相同，故 LCS 分段与差异段数一致；
+      // 重新计算新组分段并校验段数后迁移逐段选择，任何不一致都不迁移（回退新组默认）
+      if (oldChoice === 'mix') {
+        const plan = planMix(mergedText(cuesA, ng.aIdx), mergedText(cuesB, ng.bIdx));
+        const oldChoices = oldState.resolution.mixChoices;
+        if (plan.ok && oldChoices.length === plan.diffCount) {
+          resolution.text = 'mix';
+          resolution.mixChoices = oldChoices.slice();
+        }
       }
     }
     // isConflict 以新组默认状态为准（新组可能不再是冲突）；迁入了人工决定即视为已解决
