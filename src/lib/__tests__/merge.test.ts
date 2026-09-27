@@ -41,6 +41,7 @@ function resolved(patch: Partial<GroupState['resolution']> = {}): GroupState {
       customStart: '',
       customEnd: '',
       keep: true,
+      mixChoices: [],
       ...patch,
     },
   };
@@ -93,5 +94,17 @@ describe('buildMergedCues', () => {
     const states = [resolved({ time: 'custom', customStart: 'bad', customEnd: '00:00:02,000' })];
     const { issues } = buildMergedCues(groups, states, cuesA, cuesB);
     expect(issues.some((i) => i.kind === 'time-parse')).toBe(true);
+  });
+
+  it('局部混编按逐段选择生成文本并进入合并结果', () => {
+    const a = parseSrt('1\n00:00:01,000 --> 00:00:02,000\n你好世界\n');
+    const b = parseSrt('1\n00:00:01,000 --> 00:00:02,000\n你好呀世界\n');
+    const groups = [group('g0', [0], [0])];
+    // 唯一差异段（B 插入“呀”）取 B
+    const takeB = resolved({ text: 'mix', mixChoices: ['B'] });
+    expect(buildMergedCues(groups, [takeB], a, b).cues[0].text).toBe('你好呀世界');
+    // 同段取 A 即删除该插入
+    const takeA = resolved({ text: 'mix', mixChoices: ['A'] });
+    expect(buildMergedCues(groups, [takeA], a, b).cues[0].text).toBe('你好世界');
   });
 });

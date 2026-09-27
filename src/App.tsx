@@ -354,9 +354,16 @@ export default function App() {
 
   const updateResolution = (gi: number, patch: Partial<Resolution>) => {
     setStates((prev) =>
-      prev.map((s, i) =>
-        i === gi ? { ...s, resolved: true, resolution: { ...s.resolution, ...patch } } : s,
-      ),
+      prev.map((s, i) => {
+        if (i !== gi) return s;
+        let resolution = { ...s.resolution, ...patch };
+        // 改选整组 A/B/自定义/局部混编（或重新对齐）时清除旧的逐片段选择，
+        // 避免片段边界变化后旧选择错位；新选择由调用方在 patch.mixChoices 中给出
+        if (patch.text && patch.text !== s.resolution.text) {
+          resolution = { ...resolution, mixChoices: patch.mixChoices ?? [] };
+        }
+        return { ...s, resolved: true, resolution };
+      }),
     );
   };
 
@@ -367,7 +374,7 @@ export default function App() {
         const g = groups[i];
         if (g.aIdx.length === 0 || g.bIdx.length === 0) return s;
         const text = choice === 'longer' ? suggestTextChoice(g, cuesA, cuesBEff) : choice;
-        return { ...s, resolved: true, resolution: { ...s.resolution, text } };
+        return { ...s, resolved: true, resolution: { ...s.resolution, text, mixChoices: [] } };
       }),
     );
   };
@@ -395,6 +402,7 @@ export default function App() {
                 ...s.resolution,
                 text: suggestTextChoice(groups[i], cuesA, cuesBEff),
                 time: 'union',
+                mixChoices: [],
               },
             }
           : s,

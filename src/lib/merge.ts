@@ -1,9 +1,10 @@
 /** 合并决策：每组的用户选择、合并结果构建与时间单调性校验。 */
 import type { AlignGroup } from './align';
+import { defaultMixChoices, planMix, renderMix, type MixChoice } from './mix';
 import { parseTimecode, type Cue } from './srt';
 import { normalizeText } from './similarity';
 
-export type TextChoice = 'A' | 'B' | 'custom';
+export type TextChoice = 'A' | 'B' | 'custom' | 'mix';
 export type TimeChoice = 'A' | 'B' | 'union' | 'custom';
 
 export interface Resolution {
@@ -14,6 +15,8 @@ export interface Resolution {
   customEnd: string;
   /** 仅用于单边组：保留或丢弃 */
   keep: boolean;
+  /** 局部混编：差异段（planMix 输出中的非 equal 段）逐段 A/B 选择 */
+  mixChoices: MixChoice[];
 }
 
 export interface GroupState {
@@ -56,6 +59,7 @@ export function defaultStateFor(group: AlignGroup, cuesA: Cue[], cuesB: Cue[]): 
     customStart: '',
     customEnd: '',
     keep: true,
+    mixChoices: [],
   };
   if (group.kind === 'A-only' || group.kind === 'B-only') {
     return { isConflict: false, resolved: true, resolution: base };
@@ -105,6 +109,15 @@ export function buildMergedCues(
     let text = '';
     if (res.text === 'custom') {
       text = res.customText.trim();
+    } else if (res.text === 'mix') {
+      // 局部混编：相同字素片段固定保留，差异片段按逐段 A/B 选择拼接
+      const plan = planMix(mergedText(cuesA, g.aIdx), mergedText(cuesB, g.bIdx));
+      if (plan.ok && plan.diffCount === res.mixChoices.length) {
+        text = renderMix(plan.hunks, res.mixChoices);
+      } else {
+        // 片段数与选择不一致（重新对齐后旧选择未被清除等异常情况）：按段默认重算
+        text = plan.ok ? renderMix(plan.hunks, defaultMixChoices(plan.hunks)) : '';
+      }
     } else {
       const useA = res.text === 'A' ? g.aIdx.length > 0 : g.bIdx.length === 0;
       text = mergedText(useA ? cuesA : cuesB, useA ? g.aIdx : g.bIdx);

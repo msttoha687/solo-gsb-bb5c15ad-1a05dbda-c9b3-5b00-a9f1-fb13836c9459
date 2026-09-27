@@ -263,8 +263,14 @@ export function migrateStates(
       resolution.keep = oldState.resolution.keep;
     } else {
       const oldChoice = oldState.resolution.text;
-      // 自定义文本始终可迁移；A/B 选择仅在新组该侧非空时迁移，否则保持新组默认
-      if (oldChoice === 'custom' || (oldChoice === 'A' && ng.aIdx.length > 0) || (oldChoice === 'B' && ng.bIdx.length > 0)) {
+      // 自定义文本始终可迁移；A/B 选择仅在新组该侧非空时迁移，否则保持新组默认。
+      // 局部混编（mix）的逐片段选择依赖该组双侧文本的 LCS 分段，重新对齐后分段可能
+      // 变化，故不迁移，新组按默认处理（仍为冲突时照常标红拦截导出）。
+      if (
+        (oldChoice === 'custom' ||
+          (oldChoice === 'A' && ng.aIdx.length > 0) ||
+          (oldChoice === 'B' && ng.bIdx.length > 0))
+      ) {
         resolution.text = oldChoice;
         resolution.customText = oldState.resolution.customText;
       }
